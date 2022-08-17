@@ -31,7 +31,7 @@ class TaskManager():
 
     def _occupy_quadrant(self, coords, goal= None, spawn_crate= False):
         if spawn_crate:
-            self.active_crates.append(coords, goal)
+            self.active_crates.add(coords, goal)
         quadrant_type = self._get_quadrant_type(coords)
         self.g.grid[coords[0], coords[1]] = OCCUPIED_GOAL if quadrant_type == FREE_GOAL else OCCUPIED_SHELF
 

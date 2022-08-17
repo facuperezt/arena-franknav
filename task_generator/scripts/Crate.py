@@ -31,7 +31,7 @@ class CrateStack:
     def __init__(self, name):
         self.name = name
         self.index = 0
-        self.list = []
+        self._in_transit = []
         self._crate_map = {} # maps current_coords to crate object
 
     def __repr__(self):
@@ -63,17 +63,15 @@ class CrateStack:
     def isempty(self):
         return not self.__bool__()
 
-    def append(self, start_location: np.ndarray, end_goal: np.ndarray):
+    def add(self, start_location: np.ndarray, end_goal: np.ndarray):
         if start_location.tobytes() in self._crate_map:
             raise ValueError('Can\'t spawn crates on top of eachother')
         crate = Crate(start_location, end_goal, self.index)
-        self.list.append(crate)
         self._crate_map[start_location.tobytes()] = crate
         self.index += 1
 
     def remove(self, location: np.ndarray):
         crate = self._crate_map.pop(location.tobytes())
-        self.list.remove(crate)
 
     def move_crate(self, old_location: np.ndarray, new_location: np.ndarray):
         if new_location.tobytes() in self._crate_map:

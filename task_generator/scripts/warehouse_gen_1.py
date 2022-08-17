@@ -19,10 +19,10 @@ possible_separations = ['max', 'center', 'near', 'far']
 
 # hyper-parameters
 
-size = (20, 20) # meters
+size = (10, 10) # meters
 size_pixels = tuple(a/resolution for a in size)
 layout = 'vertical'  
-nr_shelf_groups = 7
+nr_shelf_groups = 2
 separation = 'center'
 nr_goals = 5
 
