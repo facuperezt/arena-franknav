@@ -97,6 +97,48 @@ def upscale_grid(grid, n = pixels_per_meter):
 
     return grid
 
+def make_rware(shelf_columns, shelf_rows, column_height):
+    '''rware warehouse'''
+    assert shelf_columns % 2 == 1, "Only odd number of shelf columns is supported"
+
+    grid_size = (
+        (column_height + 1) * shelf_rows + 2,
+        (2 + 1) * shelf_columns + 1,
+    )
+    column_height = column_height
+    grid = np.zeros((2, *grid_size), dtype=np.int32)
+    goals = [
+        (grid_size[1] // 2 - 1, grid_size[0] - 1),
+        (grid_size[1] // 2, grid_size[0] - 1),
+    ]
+
+    highways = np.zeros(grid_size, dtype=np.int32)
+
+    highway_func = lambda x, y: (
+        (x % 3 == 0)  # vertical highways
+        or (y % (column_height + 1) == 0)  # horizontal highways
+        or (y == grid_size[0] - 1)  # delivery row
+        or (  # remove a box for queuing
+            (y > grid_size[0] - (column_height + 3))
+            and ((x == grid_size[1] // 2 - 1) or (x == grid_size[1] // 2))
+        )
+    )
+    for x in range(grid_size[1]):
+        for y in range(grid_size[0]):
+            highways[y, x] = highway_func(x, y)
+    
+    for x,y in goals:
+        highways[y,x]=FREE_GOAL
+
+    highways[highways==0]=FREE_SHELF
+    highways[highways==1]=EMPTY
+
+    return highways
+
+
+    
+    
+
 # script
 
 grid_size = np.array(size)/grid_cell_size
@@ -106,9 +148,9 @@ g.grid = np.zeros(grid_size.astype(np.int32))
 #g = add_walls(g)
 g = add_goals(g)
 g = add_shelves(g)
-
-
-plt.imshow(g.grid)
+g.grid = make_rware(1,3,3)
+print(g.grid)
+plt.imshow(make_rware(3,2,2))
 
 np.save('wh1', g.grid)
 
