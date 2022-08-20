@@ -3,14 +3,15 @@ import numpy as np
 from Grid import *
 from matplotlib import pyplot as plt
 from Crate import CrateStack
-from typing import List, Dict, Union, Literal, TypedDict
+from typing import List, Dict, Union, Literal, TypedDict, Any
+
 
 
 class TaskManager():
     def __init__(self, g: Grid, name: str = 'default'):
         self.g = g
         self.active_crates = CrateStack(name)
-        self.crate_index_to_robots:  Dict[int]= {}
+        self.crate_index_to_robots:  Dict[int, Robot]= {}
 
     ## MANAGE QUADRANTS ##
     def _get_random_quadrant_of_type(self, quadrant_type, nr_quadrants= 1, random=True):
@@ -94,8 +95,8 @@ class TaskManager():
             print('goal is occupied. No task was generated.')
         else:
             self._spawn_crate_manual(starting_point, goal)
-            
-            
+
+
 
     ## PUBLIC FUNCTIONS ## 
     def generate_new_task(self, type: Literal['pack', 'unpack', 'manual'], **kwargs):
@@ -137,7 +138,6 @@ class TaskManager():
             self._free_quadrant(goal, True)
 
 
-
 class Robot:
     def __init__(self, name, index):
         self.name = name
@@ -157,7 +157,7 @@ tm.generate_new_task('pack')
 plt.imshow(g.grid)
 tm.active_crates[0]
 #%%
-crate_index, goal = tm.pickup_crate(tm.active_crates[0].current_location, robot.name)
+crate_index, goal = tm.pickup_crate(tm.active_crates[0].current_location, robot)
 robot.crate_index = crate_index
 robot.goal = goal
 plt.imshow(g.grid)
@@ -169,7 +169,7 @@ tm.generate_new_task('unpack')
 plt.imshow(g.grid)
 tm.active_crates._crate_map.items()
 #%%
-crate_index, goal = tm.pickup_crate(tm.active_crates[0].current_location, robot.name)
+crate_index, goal = tm.pickup_crate(tm.active_crates[0].current_location, robot)
 robot.crate_index = crate_index
 robot.goal = goal
 plt.imshow(g.grid)
