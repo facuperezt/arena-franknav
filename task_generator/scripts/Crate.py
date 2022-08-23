@@ -41,7 +41,7 @@ class CrateStack:
         self.name = name
         self.index: int = 0
         self._in_transit: List[Crate] = []
-        self._crate_map: Dict[Crate] = {} # maps current_coords to crate object
+        self._crate_map: Dict[bytes, Crate] = {} # maps current_coords to crate object
 
     def __repr__(self):
         return f'Crate Stack "{self.name}"\n\tActive Crates: {len(self._crate_map)}'
