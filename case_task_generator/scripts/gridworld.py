@@ -70,7 +70,7 @@ class Map:
         tmp_arr = arr
         tmp_arr[tmp_arr==3]=0
         _,thresh = cv.threshold(tmp_arr,1, 255,0)
-        cntrs, _ = cv.findContours(thresh.astype(np.uint8), cv.RETR_TREE,cv.CHAIN_APPROX_SIMPLE)
+        cntrs = cv.findContours(thresh.astype(np.uint8), cv.RETR_TREE,cv.CHAIN_APPROX_SIMPLE)
         lines_vert = []
         lines_hori = []
         

@@ -102,7 +102,7 @@ class CrateStack:
             print(f'No crate found at location {location}')
         return crate
 
-    def pickup_crate(self, crate_location: np.ndarray):
+    def pickup_crate(self, crate_location: np.ndarray) -> Crate:
         """
         If there's crate at location, remove it from the _crate_map and add it to the _in_transit list.
         
@@ -122,7 +122,7 @@ class CrateStack:
         try:
             crate = self.remove(crate_location)
             self._in_transit.append(crate)
-            return crate.index, crate.goal
+            return crate
 
         except KeyError as e:
             warnings.warn(f'{crate_location} does not have a Crate.', CrateWarning)
@@ -145,6 +145,8 @@ class CrateStack:
         else:
             warnings.warn("Crate is not in transit.", CrateWarning)
             return False
+
+
 
 class CrateWarning(UserWarning):
     pass

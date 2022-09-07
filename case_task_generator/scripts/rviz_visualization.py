@@ -1,3 +1,4 @@
+#%%
 #!/usr/bin/env python
 
 import roslib; roslib.load_manifest('visualization_marker_tutorials')
@@ -18,7 +19,7 @@ OCCUPIED_SHELF_COLOR=(0,0,1)
 FREE_GOAL_COLOR =(1,0.5,0)
 OCCUPIED_GOAL_COLOR=(1,0,0)
 CRATE_COLOR=(0,1,0)
-path= '/home/patrick/catkin_ws/src/utils/arena-simulation-setup/maps/ignc/map.png'
+path= '../mapP.png'
 
 class Visualizer:
     def __init__(self):
@@ -127,43 +128,46 @@ class Visualizer:
         #print(tm.g.grid)
         if step==0:
             return tm.g.grid
-        #%%
+
         tm.generate_new_task('pack')
         if step==1:
             return tm.g.grid
         tm.active_crates[0]
-        #%%
+
         crate_index, goal = tm.pickup_crate(tm.active_crates[0].current_location, robot.name)
         robot.crate_index = crate_index
         robot.goal = goal
         if step==2:
             return tm.g.grid
-        #%%
+
         tm.drop_crate(robot.crate_index, robot.goal)
         if step==3:
             return tm.g.grid
-        #%%
+
         tm.generate_new_task('unpack')
 
         if step==4:
             return tm.g.grid
         tm.active_crates._crate_map.items()
-        #%%
         crate_index, goal = tm.pickup_crate(tm.active_crates[0].current_location, robot.name)
         robot.crate_index = crate_index
         robot.goal = goal
         if step==5:
             return tm.g.grid
-        #%%
+
         tm.drop_crate(robot.crate_index, robot.goal)
         if step==6:
             return tm.g.grid
-        #%%
+
         tm.empty_delivered_goal()
         tm.active_crates
         if step==7:
             return tm.g.grid
+#%%
+vis = Visualizer()
 
+#%%
 if __name__ == "__main__":
     vis = Visualizer()
     vis.main()
+# %%

@@ -2,16 +2,20 @@
 import numpy as np
 from Grid import *
 from matplotlib import pyplot as plt
-from Crate import CrateStack
+from Crate import CrateStack, Crate
 from typing import List, Dict, Union, Literal, TypedDict, Any
+from task_generator.task_generator.robot_manager import RobotManager
 
 
 
-class TaskManager():
-    def __init__(self, g: Grid, name: str = 'default'):
+class CaseTaskManager():
+    def __init__(self, grid: np.ndarray, name: str = 'default'):
+        g = Grid()
+        g.grid = grid
+        self._starting_state_grid = grid
         self.g = g
         self.active_crates = CrateStack(name)
-        self.crate_index_to_robots:  Dict[int, Robot]= {}
+        self.crate_index_to_robots:  Dict[int, RobotManager]= {}
 
     ## MANAGE QUADRANTS ##
     def _get_random_quadrant_of_type(self, quadrant_type, nr_quadrants= 1, random=True):
@@ -71,8 +75,10 @@ class TaskManager():
     def _generate_pack_task(self, goal: np.ndarray= None):
         if not self._can_spawn_crate():
             print('No free goals to spawn crate in')
+            return False
         else:
             self._spawn_crates(1, goal)
+            return True
 
 
     def _generate_unpack_task(self):
@@ -84,41 +90,53 @@ class TaskManager():
             goal = self._get_random_quadrant_of_type(FREE_GOAL).squeeze()
             if not goal.size > 0:
                 print('No free goals')
+                return False
             else:
                 crate = self.active_crates.get_crate_at_location(crate_location)
                 crate.set_new_goal(goal)
+                return True
 
     def _generate_manual_task(self, starting_point: np.ndarray, goal: np.ndarray):
         if self.g.grid[starting_point] not in [OCCUPIED_GOAL, OCCUPIED_SHELF]:
             print('No crate at starting_point. No task was generated.')
+            return False
         elif self.g.grid[goal] not in [FREE_GOAL, FREE_SHELF, EMPTY]:
             print('goal is occupied. No task was generated.')
+            return False
         else:
             self._spawn_crate_manual(starting_point, goal)
+            return True
 
 
+
+    def pose2d_to_numpy(self, pose: Pose2D) -> np.ndarray:
+        return np.ndarray([pose.x, pose.y])
 
     ## PUBLIC FUNCTIONS ## 
     def generate_new_task(self, type: Literal['pack', 'unpack', 'manual'], **kwargs):
         if type not in ['pack', 'unpack', 'manual']:
             raise ValueError('Assignment not implemented')
         if type == 'pack':
-            self._generate_pack_task()            
+            return self._generate_pack_task()            
         elif type == 'unpack':
-            self._generate_unpack_task()
+            return self._generate_unpack_task()
         elif type == 'manual':
-            self._generate_manual_task(kwargs.get('starting_point'), kwargs.get('goal')) # passed argument like this, because this is meant to only be used explicitly.
+            return self._generate_manual_task(kwargs.get('starting_point'), kwargs.get('goal')) # passed argument like this, because this is meant to only be used explicitly.
         else:
             raise ValueError(f'type: {type} is not recognized. Accepted types are "pack" and "unpack".')
 
-    def pickup_crate(self, crate_location: np.ndarray, robot_name: str='Default'):
-        crate_index, goal = self.active_crates.pickup_crate(crate_location)
+    def pickup_crate(self, crate_location: Union[Pose2D, np.ndarray], robot_manager: RobotManager) -> Crate:
+        if type(crate_location) is Pose2D:
+            crate_location = self.pose2d_to_numpy(crate_location)
+        crate = self.active_crates.pickup_crate(crate_location)
         self._free_quadrant(crate_location)
-        self.crate_index_to_robots[crate_index] = robot_name
+        self.crate_index_to_robots[crate.index] = robot_manager
 
-        return crate_index, goal
+        return crate
 
-    def drop_crate(self, crate_index: int, drop_location: np.ndarray) -> Union[int, None]:
+    def drop_crate(self, crate_index: int, drop_location: Union[Pose2D, np.ndarray]) -> Union[int, None]:
+        if type(drop_location) is Pose2D: 
+            drop_location = self.pose2d_to_numpy(drop_location)
         drop_successful = self.active_crates.drop_crate(crate_index, drop_location)
         if drop_successful:
             self._occupy_quadrant(drop_location) 
@@ -127,7 +145,9 @@ class TaskManager():
     def get_in_transit_crates(self):
         return self.active_crates._in_transit
 
-    def empty_delivered_goal(self, goal: np.ndarray= None):
+    def empty_delivered_goal(self, goal_Pose2D: Union[Pose2D, np.ndarray]= None):
+        if type(goal) is Pose2D:
+            goal = self.pose2d_to_numpy(goal)
         if goal is None:
             all_goals = self._find(OCCUPIED_GOAL)
             for g in all_goals:
@@ -137,6 +157,27 @@ class TaskManager():
         else:
             self._free_quadrant(goal, True)
 
+    def generate_scenareo(self, nr_tasks: int, type: Literal['random', 'manual']= 'random', **kwargs):
+        self.reset()
+        if type == 'random':
+            tasks = ['pack', 'unpack']
+            for i in range(nr_tasks):
+                success = self.generate_new_task(tasks[i%2])
+                if not success:
+                    raise RuntimeError('For some reason not enough tasks could be generated.')
+        elif type == 'manual':
+            raise NotImplementedError
+            starts, goals = kwargs.get('starts'), kwargs.get('goals')
+            if starts is None or goals is None:
+                raise ValueError('starts and goals have to be passed to run Manual task')
+            
+    def reset(self):
+        self.g.grid = self._starting_state_grid
+        self.active_crates = CrateStack(self.active_crates.name)
+        self.crate_index_to_robots:  Dict[int, RobotManager]= {}
+
+
+
 
 class Robot:
     def __init__(self, name, index):
@@ -145,41 +186,89 @@ class Robot:
         self.crate_index = None
         self.goal = None
 
-grid = np.load('wh1.npy')
-g = Grid()
-g.grid = grid
+
+
+file = 'wh1.npy'
 
 robot = Robot('Facu', 0)
-tm = TaskManager(g)
-plt.imshow(g.grid)
+tm = CaseTaskManager(np.load(file))
+plt.imshow(tm.g.grid)
 #%%
 tm.generate_new_task('pack')
-plt.imshow(g.grid)
+plt.imshow(tm.g.grid)
 tm.active_crates[0]
 #%%
 crate_index, goal = tm.pickup_crate(tm.active_crates[0].current_location, robot)
 robot.crate_index = crate_index
 robot.goal = goal
-plt.imshow(g.grid)
+plt.imshow(tm.g.grid)
 #%%
 tm.drop_crate(robot.crate_index, robot.goal)
-plt.imshow(g.grid)
+plt.imshow(tm.g.grid)
 #%%
 tm.generate_new_task('unpack')
-plt.imshow(g.grid)
+plt.imshow(tm.g.grid)
 tm.active_crates._crate_map.items()
 #%%
 crate_index, goal = tm.pickup_crate(tm.active_crates[0].current_location, robot)
 robot.crate_index = crate_index
 robot.goal = goal
-plt.imshow(g.grid)
+plt.imshow(tm.g.grid)
 #%%
 tm.drop_crate(robot.crate_index, robot.goal)
-plt.imshow(g.grid)
+plt.imshow(tm.g.grid)
 #%%
 tm.empty_delivered_goal()
-plt.imshow(g.grid)
+plt.imshow(tm.g.grid)
 tm.active_crates
 
 
+# %%
+from nav_msgs.msg import OccupancyGrid
+import rospy
+import cv2
+import numpy as np
+
+var = None
+
+def store_in_np(map: OccupancyGrid):
+    arr = np.array(map.data)
+    print(map.info)
+    width = map.info.width
+    height = map.info.height
+
+    global var
+    arr = arr.reshape(height, width)
+    var = np.zeros([height, width, 3])
+    var[:,:,0] = arr*64/255.0
+    var[:,:,1] = arr*128/255.0
+    var[:,:,2] = arr*192/255.0
+
+    cv2.imwrite('color_img.jpg', var)
+    cv2.imshow("image", var)
+    cv2.waitKey()
+
+
+rospy.init_node('my_node')
+sub = rospy.Subscriber('/map', OccupancyGrid, store_in_np)
+
+
+# %%
+from geometry_msgs.msg import Pose2D
+a = Pose2D()
+a.x = 1
+a.y = 1
+a.theta = 0
+
+b = Pose2D()
+b.x = 1
+b.y = 1
+b.theta = 1
+
+print(a == b)
+b.theta = 0
+print(a == b)
+
+d = {}
+d[a] = b
 # %%
