@@ -19,7 +19,7 @@ OCCUPIED_SHELF_COLOR=(0,0,1)
 FREE_GOAL_COLOR =(1,0.5,0)
 OCCUPIED_GOAL_COLOR=(1,0,0)
 CRATE_COLOR=(0,1,0)
-path= '../mapP.png'
+path= 'map.png'
 
 class Visualizer:
     def __init__(self):
@@ -28,7 +28,7 @@ class Visualizer:
         self.map = Map(path=path)
         topic = 'visualization_marker_array'
         self.publisher = rospy.Publisher(topic, MarkerArray, queue_size=self.map.grid_size[0]*self.map.grid_size[1])
-        rospy.init_node('register')
+        rospy.init_node('markers_patrick')
 
         self.markerArray = MarkerArray()
         self.map_ID2COLOR={'1': CRATE_COLOR,

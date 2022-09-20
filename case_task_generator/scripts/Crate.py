@@ -3,6 +3,7 @@ from typing import Iterator
 import numpy as np
 import warnings
 from typing import List, Dict, Union
+from geometry_msgs.msg import Pose2D
 
 class Crate:
     def __init__(self, start_location: np.ndarray, end_goal: np.ndarray, index: int):
@@ -33,6 +34,14 @@ class Crate:
         self.goal = goal
         self.delivered = np.equal(self.current_location, self.goal).all()
 
+    def get_goal(self):
+        goal = Pose2D()
+        goal.x = self.goal[1]
+        goal.y = self.goal[0]
+        goal.theta = 1
+
+        return goal
+
 
 class CrateStack:
     
@@ -44,7 +53,13 @@ class CrateStack:
         self._crate_map: Dict[bytes, Crate] = {} # maps current_coords to crate object
 
     def __repr__(self):
-        return f'Crate Stack "{self.name}"\n\tActive Crates: {len(self._crate_map)}'
+        ret = f'Crate Stack "{self.name}"\n\tActive Crates: {len(self._crate_map)}\n'
+        for crate in self._crate_map.values():
+            ret += repr(crate) + '\n'
+
+        return ret
+
+        #return f'Crate Stack "{self.name}"\n\tActive Crates: {len(self._crate_map)}'
     
     def __iter__(self) -> Iterator[Crate]:
         return iter(list(self._crate_map.values()))

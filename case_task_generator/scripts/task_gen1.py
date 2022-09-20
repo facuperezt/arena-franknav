@@ -1,21 +1,28 @@
 #%%
 import numpy as np
-from Grid import *
+from .Grid import *
 from matplotlib import pyplot as plt
-from Crate import CrateStack, Crate
+from .Crate import CrateStack, Crate
 from typing import List, Dict, Union, Literal, TypedDict, Any
 from task_generator.task_generator.robot_manager import RobotManager
-
+from geometry_msgs.msg import Pose2D
+from actionlib_msgs.msg import GoalStatusArray, GoalStatus, GoalID
+#%%
 
 
 class CaseTaskManager():
-    def __init__(self, grid: np.ndarray, name: str = 'default'):
-        g = Grid()
-        g.grid = grid
-        self._starting_state_grid = grid
-        self.g = g
+    def __init__(self, grid_save_path: np.ndarray, name: str = 'default', num_active_tasks: int= 5):
+        """
+        params:
+            spawn_rate - every how many seconds a new crate is added to spawn queue
+        """
+        g = np.load(grid_save_path)
+        self.grid_save_path = grid_save_path
+        self.g = g.copy()
         self.active_crates = CrateStack(name)
         self.crate_index_to_robots:  Dict[int, RobotManager]= {}
+        self._num_active_tasks = num_active_tasks # simultaneos active tasks to post in task manager
+    
 
     ## MANAGE QUADRANTS ##
     def _get_random_quadrant_of_type(self, quadrant_type, nr_quadrants= 1, random=True):
@@ -26,22 +33,23 @@ class CaseTaskManager():
         return grid_inds[ind, :]
 
     def _get_quadrant_type(self, coords: np.ndarray):
-        return self.g.grid[coords[0], coords[1]]
+        return self.g[coords[0], coords[1]]
 
     def _free_quadrant(self, coords: np.ndarray, remove_crate: bool= False):
         if remove_crate:
             self.active_crates.remove(coords)
         quadrant_type = self._get_quadrant_type(coords)
-        self.g.grid[coords[0], coords[1]] = FREE_GOAL if quadrant_type == OCCUPIED_GOAL else FREE_SHELF
+        self.g[coords[0], coords[1]] = FREE_GOAL if quadrant_type == OCCUPIED_GOAL else FREE_SHELF
 
     def _occupy_quadrant(self, coords: np.ndarray, goal: bool= None, spawn_crate: bool= False):
         if spawn_crate:
             self.active_crates.add(coords, goal)
         quadrant_type = self._get_quadrant_type(coords)
-        self.g.grid[coords[0], coords[1]] = OCCUPIED_GOAL if quadrant_type == FREE_GOAL else OCCUPIED_SHELF
+        self.g[coords[0], coords[1]] = OCCUPIED_GOAL if quadrant_type == FREE_GOAL else OCCUPIED_SHELF
+
 
     def _find(self, quadrant_type):
-        return np.argwhere(self.g.grid == quadrant_type)
+        return np.argwhere(self.g == quadrant_type)
 
     ## MOVE CRATES ##
     def _can_spawn_crate(self):
@@ -81,26 +89,33 @@ class CaseTaskManager():
             return True
 
 
-    def _generate_unpack_task(self):
-        if self.active_crates.isempty():
-            print('No stashed crates to unpack.')
-
-        else:
-            crate_location = self._get_random_quadrant_of_type(OCCUPIED_SHELF).squeeze()
-            goal = self._get_random_quadrant_of_type(FREE_GOAL).squeeze()
-            if not goal.size > 0:
+    def _generate_unpack_task(self, force_free_goal= True):
+        goal = self._get_random_quadrant_of_type(FREE_GOAL).squeeze()
+        if not goal.size > 0:
+            if not force_free_goal:
+                print('WARNING: The goal is occupied!')
+                goal = self._get_random_quadrant_of_type(OCCUPIED_GOAL).squeeze()
+            else:
                 print('No free goals')
                 return False
-            else:
-                crate = self.active_crates.get_crate_at_location(crate_location)
-                crate.set_new_goal(goal)
-                return True
+
+        crate_location = self._get_random_quadrant_of_type(FREE_SHELF).squeeze()
+        if not crate_location.size > 0:
+            print('No free shelf')
+            return False
+
+        self._occupy_quadrant(crate_location, goal, spawn_crate= True)
+        
+        crate = self.active_crates.get_crate_at_location(crate_location)
+        crate.set_new_goal(goal)
+
+        return True
 
     def _generate_manual_task(self, starting_point: np.ndarray, goal: np.ndarray):
-        if self.g.grid[starting_point] not in [OCCUPIED_GOAL, OCCUPIED_SHELF]:
+        if self.g[starting_point] not in [OCCUPIED_GOAL, OCCUPIED_SHELF]:
             print('No crate at starting_point. No task was generated.')
             return False
-        elif self.g.grid[goal] not in [FREE_GOAL, FREE_SHELF, EMPTY]:
+        elif self.g[goal] not in [FREE_GOAL, FREE_SHELF, EMPTY]:
             print('goal is occupied. No task was generated.')
             return False
         else:
@@ -110,16 +125,23 @@ class CaseTaskManager():
 
 
     def pose2d_to_numpy(self, pose: Pose2D) -> np.ndarray:
-        return np.ndarray([pose.x, pose.y])
+        return np.ndarray([pose.x-0.5, pose.y-0.5])
+    
+    def numpy_to_pose2d(self, coords: np.ndarray, theta= 0) -> Pose2D:
+        pose = Pose2D(coords[1]+0.5, coords[0]+0.5, theta)
+        return pose
+
+
 
     ## PUBLIC FUNCTIONS ## 
+
     def generate_new_task(self, type: Literal['pack', 'unpack', 'manual'], **kwargs):
         if type not in ['pack', 'unpack', 'manual']:
             raise ValueError('Assignment not implemented')
         if type == 'pack':
             return self._generate_pack_task()            
         elif type == 'unpack':
-            return self._generate_unpack_task()
+            return self._generate_unpack_task(kwargs.get('force_free_goal', True))
         elif type == 'manual':
             return self._generate_manual_task(kwargs.get('starting_point'), kwargs.get('goal')) # passed argument like this, because this is meant to only be used explicitly.
         else:
@@ -142,10 +164,33 @@ class CaseTaskManager():
             self._occupy_quadrant(drop_location) 
             return self.crate_index_to_robots.pop(crate_index)
         
-    def get_in_transit_crates(self):
+    def get_transit_crates(self):
         return self.active_crates._in_transit
 
-    def empty_delivered_goal(self, goal_Pose2D: Union[Pose2D, np.ndarray]= None):
+    def get_open_tasks(self, resolution= 1, generate= False):
+        """
+        gets currently open tasks, if generate=True will generate new ones in the case of not having any available
+        """
+        crate_ids = []
+        crate_locations = []
+        crate_goals = []
+
+        for crate in self.active_crates:
+            if not crate.delivered:
+                crate_ids.append(crate.index)
+                crate_locations.append(self.numpy_to_pose2d(crate.current_location/resolution))
+                crate_goals.append(self.numpy_to_pose2d(crate.goal/resolution))
+        
+        if generate:
+            nr_tasks = np.clip(self._num_active_tasks - len(crate_ids), 0)
+            self.empty_delivered_goal()
+            self.generate_scenareo(nr_tasks, reset= False)
+            return self.get_open_tasks(generate=False) # explicitly pass false in case it just gets stuck in loop
+
+        
+        return crate_ids, crate_locations, crate_goals
+
+    def empty_delivered_goal(self, goal: Union[Pose2D, np.ndarray]= None):
         if type(goal) is Pose2D:
             goal = self.pose2d_to_numpy(goal)
         if goal is None:
@@ -157,14 +202,19 @@ class CaseTaskManager():
         else:
             self._free_quadrant(goal, True)
 
-    def generate_scenareo(self, nr_tasks: int, type: Literal['random', 'manual']= 'random', **kwargs):
-        self.reset()
+    def generate_scenareo(self, nr_tasks: int, type: Literal['random', 'manual']= 'random', reset= True, **kwargs):
+        if reset:
+            self.reset()
         if type == 'random':
-            tasks = ['pack', 'unpack']
-            for i in range(nr_tasks):
-                success = self.generate_new_task(tasks[i%2])
-                if not success:
-                    raise RuntimeError('For some reason not enough tasks could be generated.')
+            tasks = {True: 'pack', False: 'unpack'}
+
+            generated_tasks = 0
+            while generated_tasks < nr_tasks:
+                free_goals = self._find(FREE_GOAL)
+                task_type = free_goals.shape[0] > 1
+                success = self.generate_new_task(tasks[task_type])
+                generated_tasks += 1
+                
         elif type == 'manual':
             raise NotImplementedError
             starts, goals = kwargs.get('starts'), kwargs.get('goals')
@@ -172,10 +222,11 @@ class CaseTaskManager():
                 raise ValueError('starts and goals have to be passed to run Manual task')
             
     def reset(self):
-        self.g.grid = self._starting_state_grid
+        self.g = np.load(self.grid_save_path)
         self.active_crates = CrateStack(self.active_crates.name)
         self.crate_index_to_robots:  Dict[int, RobotManager]= {}
-
+    
+ 
 
 
 
@@ -188,87 +239,89 @@ class Robot:
 
 
 
-file = 'wh1.npy'
+# file = 'wh1.npy'
 
-robot = Robot('Facu', 0)
-tm = CaseTaskManager(np.load(file))
-plt.imshow(tm.g.grid)
-#%%
-tm.generate_new_task('pack')
-plt.imshow(tm.g.grid)
-tm.active_crates[0]
-#%%
-crate_index, goal = tm.pickup_crate(tm.active_crates[0].current_location, robot)
-robot.crate_index = crate_index
-robot.goal = goal
-plt.imshow(tm.g.grid)
-#%%
-tm.drop_crate(robot.crate_index, robot.goal)
-plt.imshow(tm.g.grid)
-#%%
-tm.generate_new_task('unpack')
-plt.imshow(tm.g.grid)
-tm.active_crates._crate_map.items()
-#%%
-crate_index, goal = tm.pickup_crate(tm.active_crates[0].current_location, robot)
-robot.crate_index = crate_index
-robot.goal = goal
-plt.imshow(tm.g.grid)
-#%%
-tm.drop_crate(robot.crate_index, robot.goal)
-plt.imshow(tm.g.grid)
-#%%
-tm.empty_delivered_goal()
-plt.imshow(tm.g.grid)
-tm.active_crates
-
-
-# %%
-from nav_msgs.msg import OccupancyGrid
-import rospy
-import cv2
-import numpy as np
-
-var = None
-
-def store_in_np(map: OccupancyGrid):
-    arr = np.array(map.data)
-    print(map.info)
-    width = map.info.width
-    height = map.info.height
-
-    global var
-    arr = arr.reshape(height, width)
-    var = np.zeros([height, width, 3])
-    var[:,:,0] = arr*64/255.0
-    var[:,:,1] = arr*128/255.0
-    var[:,:,2] = arr*192/255.0
-
-    cv2.imwrite('color_img.jpg', var)
-    cv2.imshow("image", var)
-    cv2.waitKey()
+# robot = Robot('Facu', 0)
+# tm = CaseTaskManager(np.load(file))
+# plt.imshow(tm.g.grid)
+# #%%
+# tm.generate_new_task('pack')
+# plt.imshow(tm.g.grid)
+# tm.active_crates[0]
+# #%%
+# crate_index, goal = tm.pickup_crate(tm.active_crates[0].current_location, robot)
+# robot.crate_index = crate_index
+# robot.goal = goal
+# plt.imshow(tm.g.grid)
+# #%%
+# tm.drop_crate(robot.crate_index, robot.goal)
+# plt.imshow(tm.g.grid)
+# #%%
+# tm.generate_new_task('unpack')
+# plt.imshow(tm.g.grid)
+# tm.active_crates._crate_map.items()
+# #%%
+# crate_index, goal = tm.pickup_crate(tm.active_crates[0].current_location, robot)
+# robot.crate_index = crate_index
+# robot.goal = goal
+# plt.imshow(tm.g.grid)
+# #%%
+# tm.drop_crate(robot.crate_index, robot.goal)
+# plt.imshow(tm.g.grid)
+# #%%
+# tm.empty_delivered_goal()
+# plt.imshow(tm.g.grid)
+# tm.active_crates
 
 
-rospy.init_node('my_node')
-sub = rospy.Subscriber('/map', OccupancyGrid, store_in_np)
+# # %%
+# from nav_msgs.msg import OccupancyGrid
+# import rospy
+# import cv2
+# import numpy as np
+
+# var = None
+
+# def store_in_np(map: OccupancyGrid):
+#     arr = np.array(map.data)
+#     print(map.info)
+#     width = map.info.width
+#     height = map.info.height
+
+#     global var
+#     arr = arr.reshape(height, width)
+#     var = np.zeros([height, width, 3])
+#     var[:,:,0] = arr*64/255.0
+#     var[:,:,1] = arr*128/255.0
+#     var[:,:,2] = arr*192/255.0
+
+#     cv2.imwrite('color_img.jpg', var)
+#     cv2.imshow("image", var)
+#     cv2.waitKey()
 
 
-# %%
-from geometry_msgs.msg import Pose2D
-a = Pose2D()
-a.x = 1
-a.y = 1
-a.theta = 0
+# rospy.init_node('my_node')
+# sub = rospy.Subscriber('/map', OccupancyGrid, store_in_np)
 
-b = Pose2D()
-b.x = 1
-b.y = 1
-b.theta = 1
 
-print(a == b)
-b.theta = 0
-print(a == b)
+# # %%
+# from geometry_msgs.msg import Pose2D
+# a = Pose2D()
+# a.x = 1
+# a.y = 1
+# a.theta = 0
 
-d = {}
-d[a] = b
+# b = Pose2D()
+# b.x = 1
+# b.y = 1
+# b.theta = 1
+
+# print(a == b)
+# b.theta = 0
+# print(a == b)
+
+# d = {}
+# d[a] = b
+# # %%
+
 # %%

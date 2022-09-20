@@ -1,11 +1,12 @@
 #%%
 import numpy as np
 import numpy.ma as ma
-from Grid import *
+from .Grid import *
 import matplotlib.pyplot as plt
+import rospkg
 
 # configs
-
+#%%
 import numpy as np
 pixels_per_meter = 100
 resolution = 1/pixels_per_meter
@@ -145,19 +146,23 @@ grid_size = np.array(size)/grid_cell_size
 g = Grid()
 g.grid = np.zeros(grid_size.astype(np.int32))
 
+print(g.grid.shape)
 #g = add_walls(g)
 g = add_goals(g)
 g = add_shelves(g)
-g.grid = make_rware(1,3,3)
-print(g.grid)
-plt.imshow(make_rware(3,2,2))
+g.grid = np.flip(make_rware(3,2,2), axis= 0)
+plt.imshow(g.grid, origin='lower')
 
-np.save('wh1', g.grid)
-
+np.save(f"{rospkg.RosPack().get_path('arena-simulation-setup')}maps/warehouse_1_cases/map.npy", g.grid)
+from PIL import Image
+img = np.rint(upscale_grid(g,100).grid/5*255).astype(np.uint8)
+im = Image.fromarray(np.flip(img, axis= 0))
+#/home/u20/MARL_ws/src/forks/arena-simulation-setup/maps/warehouse_1_cases/
+im.save(f"{rospkg.RosPack().get_path('arena-simulation-setup')}maps/warehouse_1_cases/map.png")
 
 
 
 # %%
-plt.imshow(upscale_grid(g, 100))
+plt.imshow(upscale_grid(g.grid, 100))
 
 # %%
